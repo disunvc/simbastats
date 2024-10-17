@@ -24,6 +24,7 @@ class Tracker:
         self.kalman_filters = {}  # Dictionary to hold Kalman filters for each track
         self.confidence_scores = {}  # Dictionary to hold confidence scores
         self.yolo_to_kalman_map = {}  # Mapping YOLO IDs to Kalman track IDs
+        self.threshold_distance = 30
 
     def create_kalman_filter(self, track_id):
         """Initialize a Kalman filter for tracking."""
