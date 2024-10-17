@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import cv2
 from collections import defaultdict
-from utils.bbox import get_center_of_bbox, get_bbox_width, get_foot_position
+from utils.bbox import get_center_of_bbox, get_bbox_width, get_foot_position,measure_distance
 from utils.assign_teams import TeamAssigner
 from utils.df_write import create_and_write_csv
 from filterpy.kalman import KalmanFilter
@@ -69,11 +69,17 @@ class Tracker:
 
     def get_object_tracks(self, frames, frame_count, read_from_stub=False, stub_path=None):
         try:
+            # Ensure frames are valid
+            if frames is None:
+                raise ValueError(f"Frame {frame_count} is None. Skipping this frame.")
+
+            # Read from stub if required
             if read_from_stub and stub_path is not None and os.path.exists(stub_path):
                 with open(stub_path, 'rb') as f:
                     tracks = pickle.load(f)
                 return tracks
 
+            # YOLO detection
             yolo_results = self.detect_frames(frames)
             if not yolo_results:
                 raise ValueError("YOLO detection returned no results.")
@@ -126,7 +132,7 @@ class Tracker:
                         tracks["players"][frame_num][track_id] = {"bbox": bbox, "yolo_id": yolo_id}
                     elif cls_id == cls_names_inv['referee']:
                         tracks["referees"][frame_num][track_id] = {"bbox": bbox, "yolo_id": yolo_id}
-                    elif cls_id == cls_names_inv['goalkeeper']:  # Add logic for goalkeepers
+                    elif cls_id == cls_names_inv['goalkeeper']:
                         tracks["goalkeepers"][frame_num][track_id] = {"bbox": bbox, "yolo_id": yolo_id}
 
                 for frame_detection in detection_supervision:
@@ -153,6 +159,38 @@ class Tracker:
                 referee_dict = tracks["referees"][frame_num]
                 goalkeeper_dict = tracks["goalkeepers"][frame_num]
 
+                # Pass Detection Logic
+                ball_position = None
+                if ball_dict and 1 in ball_dict:  # Make sure there is ball data for this frame
+                    ball_position = get_center_of_bbox(ball_dict[1]["bbox"])
+
+                if ball_position:
+                    for track_id, player in player_dict.items():
+                        player_position = get_foot_position(player["bbox"])
+
+                        # Measure distance between player and ball
+                        distance_to_ball = measure_distance(player_position, ball_position)
+
+                        # Detect if a player has possession (pass detection)
+                        if distance_to_ball < self.threshold_distance:
+                            if self.previous_ball_holder is not None and self.previous_ball_holder != track_id:
+                                # A pass is detected
+                                print(
+                                    f"Pass detected from Player {self.previous_ball_holder} to Player {track_id} at Frame {frame_num}")
+
+                                # Log the pass event to the CSV
+                                self.add_row_to_csv(frame_num, self.previous_ball_holder, track_id, player_position[0],
+                                                    player_position[1], 'Pass', object_type="Pass")
+
+                            # Update ball possession to the current player
+                            self.previous_ball_holder = track_id
+                            print(f"Ball now with Player {track_id} at Frame {frame_num}")
+
+                        # Log the player's position normally if no pass is detected
+                        else:
+                            self.add_row_to_csv(frame_num, track_id, track_id, player_position[0], player_position[1],
+                                                player.get('team_color', 'unknown'), object_type="Player")
+
                 for track_id, player in player_dict.items():
                     color = player.get("team_color", (0, 0, 255))
                     track_frame = self.draw_track_ellipse(track_frame, player["bbox"], color, track_id)
@@ -178,7 +216,7 @@ class Tracker:
                 for track_id, goalkeeper in goalkeeper_dict.items():
                     cx, cy = get_foot_position(goalkeeper["bbox"])
                     yolo_id = goalkeeper.get("yolo_id", 'Unknown')
-                    track_frame = self.draw_track_ellipse(track_frame, referee["bbox"],(167, 255, 167))
+                    track_frame = self.draw_track_ellipse(track_frame, referee["bbox"], (167, 255, 167))
                     # Add or update the row with 'Goalkeeper' object type
                     self.add_row_to_csv(frame_count, yolo_id, track_id, cx, cy, "blue", object_type="Goalkeeper")
 

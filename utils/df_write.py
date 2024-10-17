@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 def create_and_write_csv(file_name):
     # Define the column names, including track_id to separate YOLO and Kalman filter IDs
     columns = ['frame_count', 'yolo_id', 'track_id', 'x', 'y', 'color', 'object_type']
@@ -16,13 +15,14 @@ def create_and_write_csv(file_name):
         # Create a new row as a dictionary
         row = {
             'frame_count': frame_count,
-            'yolo_id': yolo_id,  # YOLO ID
+            'yolo_id': yolo_id if yolo_id is not None else 'N/A',  # Handle cases when YOLO ID is missing
             'track_id': track_id,  # Kalman filter track ID
             'x': x,
             'y': y,
             'color': color,
-            'object_type': object_type
+            'object_type': object_type  # e.g., 'Player', 'Pass', 'Ball', etc.
         }
+
 
         # Append the row to the DataFrame
         df_new = pd.DataFrame([row])
