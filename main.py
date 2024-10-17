@@ -27,7 +27,7 @@ def apply_birds_eye_view(frame, src_points, dest_points):
 
 
 def main():
-    video_path = 'video/case_study_video1.mov'
+    video_path = 'video/case_study_video.mov'
     tracker = Tracker('models/football.pt')
 
     # Define the points for the perspective transformation
